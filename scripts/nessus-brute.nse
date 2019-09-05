@@ -1,7 +1,6 @@
 local brute = require "brute"
 local creds = require "creds"
 local match = require "match"
-local nmap = require "nmap"
 local shortport = require "shortport"
 
 description=[[
@@ -48,7 +47,7 @@ Driver =
   end,
 
   connect = function( self )
-    self.socket = nmap.new_socket()
+    self.socket = brute.new_socket()
     if ( not(self.socket:connect(self.host, self.port, "ssl")) ) then
       return false
     end

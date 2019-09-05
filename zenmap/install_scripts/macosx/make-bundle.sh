@@ -1,6 +1,8 @@
 #!/bin/sh -e
 set -x
 
+test "x$UNDER_JHBUILD" = "x" && exit 1
+
 # make-bundle.sh
 APP_NAME=Zenmap
 ZENMAP_DIST_DIR=$PWD/dist
@@ -21,11 +23,7 @@ echo "Removing old build."
 rm -rf "$ZENMAP_DIST_DIR" "$ZENMAP_BUILD_DIR"
 
 echo "Building bundle"
-# jhbuild bootstrap
-# jhbuild build meta-gtk-osx-bootstrap
-# jhbuild build meta-gtk-osx-core
-# jhbuild build meta-gtk-osx-python
-jhbuild run gtk-mac-bundler "$SCRIPT_DIR/zenmap.bundle"
+gtk-mac-bundler "$SCRIPT_DIR/zenmap.bundle"
 
 echo "Stripping unoptimized Python libraries"
 #Remove some stuff that is unneeded. This cuts 40M off the installed size.
@@ -45,16 +43,8 @@ find "$BASE/Resources/lib/python2.7" -type f -name '*.pyo' | while read py; do
 done
 
 echo "Building using distutils"
-jhbuild run python setup.py build --executable "/usr/bin/env python"
-jhbuild run python setup.py install vanilla --prefix "$BASE/Resources"
-
-# This isn't truly necessary, but it allows us to do a simpler check for problems later.
-echo "Rewriting linker paths to pass checks"
-ESCAPED_LIBBASE=$(echo "$BASE/Resources/" | sed 's/\([\/\\.]\)/\\\1/g')
-find $BASE/Resources/lib -type f -name '*.dylib' | while read so; do
-  dep=$(echo "$so" | sed "s/$ESCAPED_LIBBASE//")
-  install_name_tool -id "@executable_path/../Resources/$dep" "$so"
-done
+python setup.py build --executable "/usr/bin/env python"
+python setup.py install vanilla --prefix "$BASE/Resources"
 
 echo "Renaming main Zenmap executable."
 mv $BASE/MacOS/$APP_NAME $BASE/MacOS/zenmap.bin

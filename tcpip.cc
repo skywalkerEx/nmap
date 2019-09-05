@@ -6,7 +6,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -90,12 +90,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -1360,25 +1360,31 @@ static bool validateTCPhdr(u8 *tcpc, unsigned len) {
   tcpc += sizeof(struct tcp_hdr);
   optlen = hdrlen - sizeof(struct tcp_hdr);
 
+#define OPTLEN_IS(expected) do { \
+  if (optlen < (expected) || *++tcpc != (expected)) \
+    return false; \
+  optlen -= (expected); \
+  tcpc += (expected) - 1; \
+} while(0);
+
   while (optlen > 0) {
     switch (*tcpc) {
+    case 0: // EOL
+      /* Options processing is over. */
+      return true;
+    case 1: // NOP
+      /* 1 byte, no length. All other options have a length. */
+      optlen--;
+      tcpc++;
+      break;
     case 2: /* MSS */
-      if (optlen < 4)
-        return false;
-      optlen -= 4;
-      tcpc += 4;
+      OPTLEN_IS(4);
       break;
     case 3: /* Window Scale */
-      if (optlen < 3)
-        return false;
-      optlen -= 3;
-      tcpc += 3;
+      OPTLEN_IS(3);
       break;
     case 4: /* SACK Permitted */
-      if (optlen < 2)
-        return false;
-      optlen -= 2;
-      tcpc += 2;
+      OPTLEN_IS(2);
       break;
     case 5: /* SACK */
       if (optlen < *++tcpc)
@@ -1389,23 +1395,19 @@ static bool validateTCPhdr(u8 *tcpc, unsigned len) {
       tcpc += (*tcpc - 1);
       break;
     case 8: /* Timestamp */
-      if (optlen < 10)
-        return false;
-      optlen -= 10;
-      tcpc += 10;
+      OPTLEN_IS(10);
       break;
     case 14: /* Alternate checksum */
       /* Sometimes used for hardware checksum offloading
        * ftp://ftp.ucsd.edu/pub/csl/fastnet/faq.txt
        */
-      if (optlen < 3)
-        return false;
-      optlen -= 3;
-      tcpc += 3;
+      OPTLEN_IS(3);
       break;
     default:
-      optlen--;
-      tcpc++;
+      if (optlen < 2 || optlen < *++tcpc)
+        return false;
+      optlen -= *tcpc;
+      tcpc += (*tcpc - 1);
       break;
     }
   }

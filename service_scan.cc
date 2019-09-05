@@ -6,7 +6,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -90,12 +90,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -485,9 +485,27 @@ void ServiceProbeMatch::InitMatch(const char *matchtext, int lineno) {
     fatal("%s: illegal regexp on line %d of nmap-service-probes (at regexp offset %d): %s\n", __func__, lineno, pcre_erroffset, pcre_errptr);
 
   // Now study the regexp for greater efficiency
-  regex_extra = pcre_study(regex_compiled, 0, &pcre_errptr);
+  regex_extra = pcre_study(regex_compiled, 0
+#ifdef PCRE_STUDY_EXTRA_NEEDED
+  | PCRE_STUDY_EXTRA_NEEDED
+#endif
+  , &pcre_errptr);
   if (pcre_errptr != NULL)
     fatal("%s: failed to pcre_study regexp on line %d of nmap-service-probes: %s\n", __func__, lineno, pcre_errptr);
+
+  if (!regex_extra) {
+    regex_extra = (pcre_extra *) pcre_malloc(sizeof(pcre_extra));
+    memset(regex_extra, 0, sizeof(pcre_extra));
+  }
+
+  // Set some limits to avoid evil match cases.
+  // These are flexible; if they cause problems, increase them.
+#ifdef PCRE_ERROR_MATCHLIMIT
+  regex_extra->match_limit = 100000; // 100K
+#endif
+#ifdef PCRE_ERROR_RECURSIONLIMIT
+  regex_extra->match_limit_recursion = 10000; // 10K
+#endif
 
   free(modestr);
   free(flags);
@@ -569,6 +587,12 @@ const struct MatchDetails *ServiceProbeMatch::testMatch(const u8 *buf, int bufle
         error("Warning: Hit PCRE_ERROR_MATCHLIMIT when probing for service %s with the regex '%s'", servicename, matchstr);
     } else
 #endif // PCRE_ERROR_MATCHLIMIT
+#ifdef PCRE_ERROR_RECURSIONLIMIT
+    if (rc == PCRE_ERROR_RECURSIONLIMIT) {
+      if (o.debugging || o.verbose > 1)
+        error("Warning: Hit PCRE_ERROR_RECURSIONLIMIT when probing for service %s with the regex '%s'", servicename, matchstr);
+    } else
+#endif // PCRE_ERROR_RECURSIONLIMIT
       if (rc != PCRE_ERROR_NOMATCH) {
         fatal("Unexpected PCRE error (%d) when probing for service %s with the regex '%s'", rc, servicename, matchstr);
       }
@@ -830,7 +854,7 @@ static char *substvar(char *tmplvar, char **tmplvarend,
     }
   } else if (strcmp(substcommand, "I") == 0 ){
     // Parse an unsigned int
-    u64 val = 0;
+    long long unsigned val = 0;
     bool bigendian = true;
     char buf[24]; //0xffffffffffffffff = 18446744073709551615, 20 chars
     int buflen;
@@ -871,8 +895,8 @@ static char *substvar(char *tmplvar, char **tmplvarend,
         val = (val<<8) + subject[i];
       }
     }
-    buflen = Snprintf(buf, sizeof(buf), "%lu", val);
-    if (buflen < 0 || buflen > (int) sizeof(buf)) {
+    buflen = Snprintf(buf, sizeof(buf), "%llu", val);
+    if (buflen < 0 || buflen >= (int) sizeof(buf)) {
       return NULL;
     }
     strbuf_append(&result, &n, &len, buf, buflen);
@@ -1097,9 +1121,9 @@ int ServiceProbeMatch::getVersionStr(const u8 *subject, int subjectlen,
     }
     rc = dotmplsubst(subject, subjectlen, ovector, nummatches, cpe_templates[i], cpe, cpelen, transform_cpe);
     if (rc != 0) {
-      error("Warning: Servicescan failed to fill cpe_%c (subjectlen: %d, devicetypelen: %d). Too long? Match string was line %d: d/%s/", part, subjectlen, devicetypelen, deflineno,
-            (devicetype_template)? devicetype_template : "");
-      if (devicetypelen > 0) *devicetype = '\0';
+      error("Warning: Servicescan failed to fill cpe_%c (subjectlen: %d, cpelen: %d). Too long? Match string was line %d: %s", part, subjectlen, cpelen, deflineno,
+            (cpe_templates[i])? cpe_templates[i] : "");
+      if (cpelen > 0) *cpe = '\0';
       retval = -1;
     }
   }
@@ -1846,7 +1870,10 @@ bool dropdown = false;
    while (current_probe != AP->probes.end()) {
      // For the first run, we only do probes that match this port number
      if ((proto == (*current_probe)->getProbeProtocol()) &&
-         (*current_probe)->portIsProbable(tunnel, portno)) {
+         (*current_probe)->portIsProbable(tunnel, portno) &&
+         // Skip the probe if we softmatched and the service isn't available via this probe.
+         // --version-all avoids this optimization here and in PROBESTATE_NONMATCHINGPROBES below.
+         (!softMatchFound || o.version_intensity >= 9 || (*current_probe)->serviceIsPossible(probe_matched))) {
        // This appears to be a valid probe.  Let's do it!
        return *current_probe;
      }
@@ -1867,8 +1894,10 @@ bool dropdown = false;
      // version detection intensity level.
      if ((proto == (*current_probe)->getProbeProtocol()) &&
          !(*current_probe)->portIsProbable(tunnel, portno) &&
-         (*current_probe)->getRarity() <= o.version_intensity &&
-         (!softMatchFound || (*current_probe)->serviceIsPossible(probe_matched))) {
+         // No softmatch so obey intensity, or
+         ((!softMatchFound && (*current_probe)->getRarity() <= o.version_intensity) ||
+         // Softmatch, so only require service match (no rarity check)
+         (softMatchFound && (o.version_intensity >= 9 || (*current_probe)->serviceIsPossible(probe_matched))))) {
        // Valid, probe.  Let's do it!
        return *current_probe;
      }
@@ -2294,6 +2323,9 @@ static int launchSomeServiceProbes(nsock_pool nsp, ServiceGroup *SG) {
     if (svc->target->timedOut(nsock_gettimeofday())) {
       end_svcprobe(nsp, PROBESTATE_INCOMPLETE, SG, svc, NULL);
       continue;
+    }
+    else if (!svc->target->timeOutClockRunning()) {
+      svc->target->startTimeOutClock(nsock_gettimeofday());
     }
     nextprobe = svc->nextProbe(true);
 
@@ -2731,24 +2763,6 @@ std::list<ServiceNFO *>::iterator svc;
  }
 }
 
-/* Start the timeout clocks of any targets that have probes.  Assumes
-   that this is called before any probes have been launched (so they
-   are all in services_remaining */
-static void startTimeOutClocks(ServiceGroup *SG) {
-  std::list<ServiceNFO *>::iterator svcI;
-  Target *target = NULL;
-  struct timeval tv;
-
-  gettimeofday(&tv, NULL);
-  for(svcI = SG->services_remaining.begin();
-      svcI != SG->services_remaining.end(); svcI++) {
-    target = (*svcI)->target;
-    if (!target->timeOutClockRunning())
-      target->startTimeOutClock(&tv);
-  }
-}
-
-
 
 // We iterate through SG->services_remaining and remove any with port/protocol
 // pairs that are excluded. We use AP->isExcluded() to determine which ports
@@ -2807,8 +2821,6 @@ int service_scan(std::vector<Target *> &Targets) {
   } else {
     remove_excluded_ports(AP, SG);
   }
-
-  startTimeOutClocks(SG);
 
   if (SG->services_remaining.size() == 0) {
     delete SG;

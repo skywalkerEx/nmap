@@ -5,7 +5,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -89,12 +89,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -188,7 +188,7 @@ class NmapOps {
   int isr00t;
   /* Whether we have pcap functions (can be false on Windows). */
   bool have_pcap;
-  int debugging;
+  u8 debugging;
   bool resuming;
 
 #define PACKET_SEND_NOPREF 1
@@ -221,7 +221,7 @@ class NmapOps {
   void setVersionTrace(bool vt) { vTrace = vt;  }
   bool openOnly() { return open_only; }
   void setOpenOnly(bool oo) { open_only = oo; }
-  int verbose;
+  u8 verbose;
   /* The requested minimum packet sending rate, or 0.0 if unset. */
   float min_packet_send_rate;
   /* The requested maximum packet sending rate, or 0.0 if unset. */

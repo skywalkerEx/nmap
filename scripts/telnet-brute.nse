@@ -145,7 +145,7 @@ local Connection = { methods = {} }
 -- @param port Telnet port
 -- @return Connection object or nil (if the operation failed)
 Connection.new = function (host, port, proto)
-  local soc = nmap.new_socket(proto)
+  local soc = brute.new_socket(proto)
   if not soc then return nil end
   return setmetatable({
                         socket = soc,
@@ -232,12 +232,11 @@ Connection.methods.fill_buffer = function (self, data)
 
   while true do
     -- look for IAC (Interpret As Command)
-    local newpos = data:find('\255', oldpos)
+    local newpos = data:find('\255', oldpos, true)
     if not newpos then break end
 
     outbuf = outbuf .. data:sub(oldpos, newpos - 1)
-    local opttype = data:byte(newpos + 1)
-    local opt = data:byte(newpos + 2)
+    local opttype, opt = data:byte(newpos + 1, newpos + 2)
 
     if opttype == 251 or opttype == 252 then
       -- Telnet Will / Will Not
@@ -251,9 +250,7 @@ Connection.methods.fill_buffer = function (self, data)
       opttype = 252
     end
 
-    optbuf = optbuf .. string.char(255)
-                    .. string.char(opttype)
-                    .. string.char(opt)
+    optbuf = optbuf .. string.char(255, opttype, opt)
     oldpos = newpos + 3
   end
 

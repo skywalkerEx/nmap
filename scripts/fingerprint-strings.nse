@@ -3,9 +3,21 @@ local nmap = require "nmap"
 local lpeg = require "lpeg"
 local U = require "lpeg-utility"
 local table = require "table"
+local tableaux = require "tableaux"
 
 description = [[
 Prints the readable strings from service fingerprints of unknown services.
+
+Nmap's service and application version detection engine sends named probes to
+target services and tries to identify them based on the response. When there is
+no match, Nmap produces a service fingerprint for submission. Sometimes,
+inspecting this fingerprint can give clues as to the identity of the service.
+However, the fingerprint is encoded and wrapped to ensure it doesn't lose data,
+which can make it hard to read.
+
+This script simply unwraps the fingerprint and prints the readable ASCII strings
+it finds below the name of the probe it responded to. The probe names are taken
+from the nmap-service-probes file, not from the response.
 ]]
 
 ---
@@ -76,7 +88,7 @@ action = function(host, port)
   -- Get the table of probe responses
   local responses = U.parse_fp(port.version.service_fp)
   -- extract the probe names
-  local probes = stdnse.keys(responses)
+  local probes = tableaux.keys(responses)
   -- If there were no probes (WEIRD!) we're done.
   if #probes <= 0 then
     return nil

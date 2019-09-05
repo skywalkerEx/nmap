@@ -7,7 +7,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -91,12 +91,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -861,7 +861,12 @@ int TargetGroup::get_next_host(struct sockaddr_storage *ss, size_t *sslen) {
      limit it to exactly one address). */
   NetBlock *netblock_resolved = this->netblock->resolve();
   if (netblock_resolved != NULL) {
-    this->netblock = netblock_resolved;
+    /* resolve may return the original netblock if it's not a type that needs
+     * to be resolved. Don't delete it! */
+    if (netblock_resolved != this->netblock) {
+      delete this->netblock;
+      this->netblock = netblock_resolved;
+    }
   }
   else {
     error("Failed to resolve \"%s\".", this->netblock->hostname.c_str());

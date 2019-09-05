@@ -6,7 +6,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -90,12 +90,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -129,16 +129,12 @@
  *                                                                         *
  ***************************************************************************/
 
-/* $Id: nmap.h 36906 2017-07-31 22:29:24Z dmiller $ */
+/* $Id$ */
 
 #ifndef NMAP_H
 #define NMAP_H
 
 /************************INCLUDES**********************************/
-
-#ifdef WIN32
-#include "mswin32\winclude.h"
-#endif
 
 #ifdef HAVE_CONFIG_H
 #include "nmap_config.h"
@@ -187,16 +183,25 @@
 
 /*******  DEFINES  ************/
 
+#ifdef NMAP_OEM
+#include "../nmap-build/nmap-oem.h"
+#endif
+
+#ifndef NMAP_NAME
+#define NMAP_NAME "Nmap"
+#endif
+#define NMAP_URL "https://nmap.org"
+
 #ifndef NMAP_VERSION
 /* Edit this definition only within the quotes, because it is read from this
    file by the makefiles. */
-#define NMAP_VERSION "7.60SVN"
-#define NMAP_NUM_VERSION "7.0.60.100"
+#define NMAP_VERSION "7.80SVN"
+#define NMAP_NUM_VERSION "7.0.80.100"
 #endif
 /* The version number of updates retrieved by the nmap-update
    program. It can be different (but should always be the same or
    earlier) than NMAP_VERSION. */
-#define NMAP_UPDATE_CHANNEL "7.60"
+#define NMAP_UPDATE_CHANNEL "7.80"
 
 #define NMAP_XMLOUTPUTVERSION "1.04"
 
@@ -292,7 +297,7 @@
 /* # define PINGTYPE_RAWTCP 128 used to be here, but was never used. */
 #define PINGTYPE_CONNECTTCP 256
 #define PINGTYPE_UDP  512
-#define PINGTYPE_ARP 1024
+/* #define PINGTYPE_ARP 1024 // Not used; see o.implicitARPPing */
 #define PINGTYPE_PROTO 2048
 #define PINGTYPE_SCTP_INIT 4096
 

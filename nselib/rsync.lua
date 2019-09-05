@@ -4,10 +4,10 @@
 -- @author Patrik Karlsson <patrik@cqure.net>
 
 local base64 = require "base64"
-local bin = require "bin"
 local match = require "match"
 local nmap = require "nmap"
 local stdnse = require "stdnse"
+local string = require "string"
 local table = require "table"
 local openssl = stdnse.silent_require "openssl"
 _ENV = stdnse.module("rsync", stdnse.seeall)
@@ -49,8 +49,8 @@ Helper = {
   -- Connects to the rsync server
   -- @return status, true on success, false on failure
   -- @return err string containing an error message if status is false
-  connect = function(self)
-    self.socket = nmap.new_socket()
+  connect = function(self, socket)
+    self.socket = socket or nmap.new_socket()
     self.socket:set_timeout(self.options.timeout or 5000)
     local status, err = self.socket:connect(self.host, self.port)
     if ( not(status) ) then
@@ -157,7 +157,7 @@ Helper = {
       return false, data
     end
 
-    local pos, len = bin.unpack("<S", data)
+    local len = string.unpack("<I2", data)
     status, data = self.socket:receive_buf(match.numbytes(len), false)
     if ( not(status) ) then
       return false, data

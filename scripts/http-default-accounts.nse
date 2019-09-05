@@ -22,6 +22,10 @@ You may select a category if you wish to reduce the number of requests. We have 
 * <code>virtualization</code> - Virtualization systems
 * <code>console</code> - Remote consoles
 
+You can also select a specific fingerprint or a brand, such as BIG-IQ or Siemens. This matching is based on case-insensitive words. This means that "nas" will select Seagate BlackArmor NAS storage but not Netgear ReadyNAS.
+
+For a fingerprint to be used it needs to satisfy both the category and name criteria.
+
 Please help improve this script by adding new entries to nselib/data/http-default-accounts.lua
 
 Remember each fingerprint must have:
@@ -76,7 +80,8 @@ This script was based on http-enum.
 --
 -- @args http-default-accounts.basepath Base path to append to requests. Default: "/"
 -- @args http-default-accounts.fingerprintfile Fingerprint filename. Default: http-default-accounts-fingerprints.lua
--- @args http-default-accounts.category Selects a category of fingerprints to use.
+-- @args http-default-accounts.category Selects a fingerprint category (or a list of categories).
+-- @args http-default-accounts.name Selects fingerprints by a word (or a list of alternate words) included in their names.
 
 -- Revision History
 -- 2013-08-13 nnposter
@@ -93,6 +98,8 @@ This script was based on http-enum.
 --   * changed classic output to report empty credentials as <blank>
 -- 2016-12-04 nnposter
 --   * added CPE entries to individual fingerprints (where known)
+-- 2018-12-17 nnposter
+--   * added ability to select fingerprints by their name
 ---
 
 author = {"Paulino Calderon <calderon@websec.mx>", "nnposter"}
@@ -169,22 +176,45 @@ local function validate_fingerprints(fingerprints)
   end
 end
 
+-- Simplify unlocking the mutex, ensuring we don't try to load the fingerprints
+-- again by storing and returning an error message in place of the cached
+-- fingerprints.
+-- @param mutex Mutex that controls fingerprint loading
+-- @param err Error message
+-- @return Status (always false)
+-- @return Error message passed in
+local function bad_prints(mutex, err)
+  nmap.registry.http_default_accounts_fingerprints = err
+  mutex "done"
+  return false, err
+end
+
 ---
--- load_fingerprints(filename, category)
--- Loads data from file and returns table of fingerprints if sanity checks are passed
--- Based on http-enum's load_fingerprints()
+-- Loads data from file and returns table of fingerprints if sanity checks are
+-- passed.
 -- @param filename Fingerprint filename
--- @param cat Category of fingerprints to use
--- @return Table of fingerprints
+-- @param catlist Categories of fingerprints to use
+-- @param namelist Alternate words required in fingerprint names
+-- @return Status (true or false)
+-- @return Table of fingerprints (or an error message)
 ---
-local function load_fingerprints(filename, cat)
+local function load_fingerprints(filename, catlist, namelist)
   local file, filename_full, fingerprints
 
   -- Check if fingerprints are cached
-  if(nmap.registry.http_default_accounts_fingerprints ~= nil) then
+  local mutex = nmap.mutex("http_default_accounts_fingerprints")
+  mutex "lock"
+  local cached_fingerprints = nmap.registry.http_default_accounts_fingerprints
+  if type(cached_fingerprints) == "table" then
     stdnse.debug(1, "Loading cached fingerprints")
-    return nmap.registry.http_default_accounts_fingerprints
+    mutex "done"
+    return true, cached_fingerprints
   end
+  if type(cached_fingerprints) == "string" then
+    -- cached_fingerprints contains an error message from a prior load attempt
+    return bad_prints(mutex, cached_fingerprints)
+  end
+  assert(type(cached_fingerprints) == "nil", "Unexpected cached fingerprints")
 
   -- Try and find the file
   -- If it isn't in Nmap's directories, take it as a direct path
@@ -199,7 +229,7 @@ local function load_fingerprints(filename, cat)
   file = loadfile(filename_full, "t", env)
   if( not(file) ) then
     stdnse.debug(1, "Couldn't load the file: %s", filename_full)
-    return false, "Couldn't load fingerprint file: " .. filename_full
+    return bad_prints(mutex, "Couldn't load fingerprint file: " .. filename_full)
   end
   file()
   fingerprints = env.fingerprints
@@ -207,15 +237,45 @@ local function load_fingerprints(filename, cat)
   -- Validate fingerprints
   local valid_flag = validate_fingerprints(fingerprints)
   if type(valid_flag) == "string" then
-    return false, valid_flag
+    return bad_prints(mutex, valid_flag)
   end
 
   -- Category filter
-  if ( cat ) then
+  if catlist then
+    if type(catlist) ~= "table" then
+      catlist = {catlist}
+    end
     local filtered_fingerprints = {}
     for _, fingerprint in pairs(fingerprints) do
-      if(fingerprint.category == cat) then
-        table.insert(filtered_fingerprints, fingerprint)
+      for _, cat in ipairs(catlist) do
+        if fingerprint.category == cat then
+          table.insert(filtered_fingerprints, fingerprint)
+          break
+        end
+      end
+    end
+    fingerprints = filtered_fingerprints
+  end
+
+  -- Name filter
+  if namelist then
+    if type(namelist) ~= "table" then
+      namelist = {namelist}
+    end
+    local matchlist = {}
+    for _, name in ipairs(namelist) do
+      table.insert(matchlist, "%f[%w]"
+                              .. tostring(name):lower():gsub("%W", "%%%1")
+                              .. "%f[%W]")
+    end
+    local filtered_fingerprints = {}
+    for _, fingerprint in pairs(fingerprints) do
+      local fpname = fingerprint.name:lower()
+      for _, match in ipairs(matchlist) do
+        if fpname:find(match) then
+          table.insert(filtered_fingerprints, fingerprint)
+          break
+        end
       end
     end
     fingerprints = filtered_fingerprints
@@ -223,9 +283,12 @@ local function load_fingerprints(filename, cat)
 
   -- Check there are fingerprints to use
   if(#fingerprints == 0 ) then
-    return false, "No fingerprints were loaded after processing ".. filename
+    return bad_prints(mutex, "No fingerprints were loaded after processing ".. filename)
   end
 
+  -- Cache the fingerprints for other scripts, so we aren't reading the files every time
+  nmap.registry.http_default_accounts_fingerprints = fingerprints
+  mutex "done"
   return true, fingerprints
 end
 
@@ -262,7 +325,8 @@ local function  test_credentials (host, port, fingerprint, path)
   for _, login_combo in ipairs(fingerprint.login_combos) do
     local user = login_combo.username
     local pass = login_combo.password
-    stdnse.debug(2, "Trying login combo -> %s:%s", user, pass)
+    stdnse.debug(2, "Trying login combo -> %s:%s",
+                 stdnse.string_or_blank(user), stdnse.string_or_blank(pass))
     if fingerprint.login_check(host, port, path, user, pass) then
       stdnse.debug(1, "[%s] valid default credentials found.", fingerprint.name)
       local cred = stdnse.output_table()
@@ -293,9 +357,9 @@ end
 
 
 action = function(host, port)
-  local fingerprintload_status, status, fingerprints, pathmap, requests, results
   local fingerprint_filename = stdnse.get_script_args("http-default-accounts.fingerprintfile") or "http-default-accounts-fingerprints.lua"
-  local category = stdnse.get_script_args("http-default-accounts.category") or false
+  local catlist = stdnse.get_script_args("http-default-accounts.category")
+  local namelist = stdnse.get_script_args("http-default-accounts.name")
   local basepath = stdnse.get_script_args("http-default-accounts.basepath") or "/"
   local output = stdnse.output_table()
   local text_output = {}
@@ -312,7 +376,7 @@ action = function(host, port)
     end
 
   --Load fingerprint data or abort
-  status, fingerprints = load_fingerprints(fingerprint_filename, category)
+  local status, fingerprints = load_fingerprints(fingerprint_filename, catlist, namelist)
   if(not(status)) then
     return stdnse.format_output(false, fingerprints)
   end
@@ -322,8 +386,8 @@ action = function(host, port)
   basepath = format_basepath(basepath)
 
   -- Add requests to the http pipeline
-  pathmap = {}
-  requests = nil
+  local pathmap = {}
+  local requests = nil
   stdnse.debug(1, "Trying known locations under path '%s' (change with '%s.basepath' argument)", basepath, SCRIPT_NAME)
   for _, fingerprint in ipairs(fingerprints) do
     for _, probe in ipairs(fingerprint.paths) do
@@ -341,7 +405,7 @@ action = function(host, port)
   end
 
   -- Nuclear launch detected!
-  results = http.pipeline_go(host, port, requests)
+  local results = http.pipeline_go(host, port, requests)
   if results == nil then
     return stdnse.format_output(false,
       "HTTP request table is empty. This should not happen since we at least made one request.")

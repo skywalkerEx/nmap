@@ -7,7 +7,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -91,12 +91,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -703,7 +703,13 @@ bool ScanProgressMeter::printStats(double perc_done,
   if (perc_done < 0.01) {
     log_write(LOG_STDOUT, "%s Timing: About %.2f%% done\n",
         scantypestr, perc_done * 100);
-    log_flush(LOG_STDOUT);
+    xml_open_start_tag("taskprogress");
+    xml_attribute("task", "%s", scantypestr);
+    xml_attribute("time", "%lu", (unsigned long) now->tv_sec);
+    xml_attribute("percent", "%.2f", perc_done * 100);
+    xml_close_empty_tag();
+    xml_newline();
+    log_flush(LOG_STDOUT|LOG_XML);
     return true;
   }
 

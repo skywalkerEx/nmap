@@ -1,9 +1,8 @@
 local brute = require "brute"
 local creds = require "creds"
 local ipmi = require "ipmi"
-local nmap = require "nmap"
 local shortport = require "shortport"
-local stdnse = require "stdnse"
+local rand = require "rand"
 
 description = [[
 Performs brute force password auditing against IPMI RPC server.
@@ -39,7 +38,7 @@ Driver = {
   end,
 
   connect = function(self)
-    self.socket = nmap.new_socket()
+    self.socket = brute.new_socket()
     self.socket:set_timeout(
       ((self.host.times and self.host.times.timeout) or 8) * 1000)
     self.socket:connect(self.host, self.port, "udp")
@@ -48,8 +47,8 @@ Driver = {
   end,
 
   login = function(self, username, password)
-    local console_session_id = stdnse.generate_random_string(4)
-    local console_random_id = stdnse.generate_random_string(16)
+    local console_session_id = rand.random_string(4)
+    local console_random_id = rand.random_string(16)
 
     local request = ipmi.session_open_request(console_session_id)
     local status, reply

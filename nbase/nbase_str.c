@@ -5,7 +5,7 @@
  *                                                                         *
  ***********************IMPORTANT NMAP LICENSE TERMS************************
  *                                                                         *
- * The Nmap Security Scanner is (C) 1996-2017 Insecure.Com LLC ("The Nmap  *
+ * The Nmap Security Scanner is (C) 1996-2019 Insecure.Com LLC ("The Nmap  *
  * Project"). Nmap is also a registered trademark of the Nmap Project.     *
  * This program is free software; you may redistribute and/or modify it    *
  * under the terms of the GNU General Public License as published by the   *
@@ -89,12 +89,12 @@
  * Covered Software without special permission from the copyright holders. *
  *                                                                         *
  * If you have any questions about the licensing restrictions on using     *
- * Nmap in other works, are happy to help.  As mentioned above, we also    *
- * offer alternative license to integrate Nmap into proprietary            *
+ * Nmap in other works, we are happy to help.  As mentioned above, we also *
+ * offer an alternative license to integrate Nmap into proprietary         *
  * applications and appliances.  These contracts have been sold to dozens  *
  * of software vendors, and generally include a perpetual license as well  *
- * as providing for priority support and updates.  They also fund the      *
- * continued development of Nmap.  Please email sales@nmap.com for further *
+ * as providing support and updates.  They also fund the continued         *
+ * development of Nmap.  Please email sales@nmap.com for further           *
  * information.                                                            *
  *                                                                         *
  * If you have received a written license agreement or contract for        *
@@ -171,8 +171,10 @@ char *strcasestr(const char *haystack, const char *pneedle) {
           free(needle);
         return (char *)(p - needlelen + 1);
       }
-    } else
+    } else {
+      p -= foundto - needle;
       foundto = needle;
+    }
   }
   if (needlelen >= sizeof(buf))
     free(needle);
@@ -194,7 +196,7 @@ int Vsnprintf(char *s, size_t n, const char *fmt, va_list ap) {
   ret = vsnprintf(s, n, fmt, ap);
 
   if (ret < 0 || (unsigned)ret >= n)
-    s[n - 1] = '\0';
+    s[n - 1] = '\0'; /* technically redundant */
 
   return ret;
 }
@@ -241,6 +243,7 @@ int alloc_vsprintf(char **strp, const char *fmt, va_list va) {
     va_copy(va_tmp, va);
 #endif
     n = vsnprintf(s, size, fmt, va_tmp);
+    va_end(va_tmp);
 
     if (n >= size)
       size = n + 1;

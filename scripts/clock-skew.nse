@@ -1,4 +1,5 @@
 local coroutine = require "coroutine"
+local datetime = require "datetime"
 local formulas = require "formulas"
 local math = require "math"
 local nmap = require "nmap"
@@ -9,15 +10,21 @@ local table = require "table"
 -- portrule scripts do not always run before hostrule scripts, and certainly
 -- not before the hostrule is evaluated.
 dependencies = {
+  "bitcoin-info",
   "http-date",
   "http-ntlm-info",
   "imap-ntlm-info",
+  "memcached-info",
   "ms-sql-ntlm-info",
   "nntp-ntlm-info",
   "ntp-info",
+  "openwebnet-discovery",
   "pop3-ntlm-info",
   "rfc868-time",
+  "smb-os-discovery",
   "smb-security-mode",
+  "smb2-time",
+  "smb2-vuln-uptime",
   "smtp-ntlm-info",
   "ssl-date",
   "telnet-ntlm-info",
@@ -87,19 +94,25 @@ local function record_stats(host, mean, stddev, median)
 end
 
 hostaction = function(host)
-  local mean, stddev = formulas.mean_stddev(host.registry.datetime_skew)
-  local median = formulas.median(host.registry.datetime_skew)
+  local skews = host.registry.datetime_skew
+  if not skews or #skews < 1 then
+    return nil
+  end
+  local mean, stddev = formulas.mean_stddev(skews)
+  local median = formulas.median(skews)
   -- truncate to integers; we don't care about fractional seconds)
   mean = math.modf(mean)
   stddev = math.modf(stddev)
   median = math.modf(median)
   record_stats(host, mean, stddev, median)
   if mean ~= 0 or stddev ~= 0 or nmap.verbosity() > 1 then
-    local out = {mean = mean, stddev = stddev, median = median}
-    return out, ("mean: %s, deviation: %s, median: %s"):format(
-      stdnse.format_time(mean),
-      stdnse.format_time(stddev),
-      stdnse.format_time(median)
+    local out = {count = #skews, mean = mean, stddev = stddev, median = median}
+    return out, (#skews == 1 and datetime.format_time(mean)
+      or ("mean: %s, deviation: %s, median: %s"):format(
+        datetime.format_time(mean),
+        datetime.format_time(stddev),
+        datetime.format_time(median)
+        )
       )
   end
 end
@@ -163,10 +176,10 @@ postaction = function()
   for mean, group in pairs(groups) do
     -- Collapse the biggest group
     if #groups > 1 and #group > host_count // 2 then
-      out[stdnse.format_time(mean)] = "Majority of systems scanned"
+      out[datetime.format_time(mean)] = "Majority of systems scanned"
     elseif #group > 1 then
       -- Only record groups of more than one system together
-      out[stdnse.format_time(mean)] = group
+      out[datetime.format_time(mean)] = group
     end
   end
 
